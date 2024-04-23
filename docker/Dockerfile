@@ -1,18 +1,21 @@
-# Use the official nginx image as the base
-FROM nginx:latest as builder
+# Use Ubuntu as the base image
+FROM ubuntu:20.04 as builder
 
-# Define ARGs and ENVs
-ARG NGINX_VERSION=1.21.6
-ENV NGINX_RTMP_MODULE_VERSION="1.2.1"
+# Avoid prompts from apt
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Install dependencies required to build NGINX and RTMP module
+# Install necessary packages
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpcre3-dev \
     libssl-dev \
     zlib1g-dev \
     wget \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates
+
+# Define ARGs for versions
+ARG NGINX_VERSION=1.21.6
+ARG NGINX_RTMP_MODULE_VERSION=1.2.1
 
 # Download and unpack the NGINX source and the nginx-rtmp module
 WORKDIR /tmp
@@ -26,23 +29,24 @@ WORKDIR /tmp/nginx-${NGINX_VERSION}
 RUN ./configure \
     --prefix=/usr/local/nginx \
     --with-http_ssl_module \
-    --add-dynamic-module=../nginx-rtmp-module-${NGINX_RTMP_MODULE_VERSION} \
+    --add-module=../nginx-rtmp-module-${NGINX_RTMP_MODULE_VERSION} \
     && make \
     && make install
 
 # Final base image
-FROM nginx:latest
+FROM ubuntu:20.04
 
-# Copy over the compiled modules and configuration from the builder
+# Copy over the compiled binaries and configuration from the builder
 COPY --from=builder /usr/local/nginx /usr/local/nginx
-COPY assets/etc/nginx.conf /etc/nginx/nginx.conf
 
-# Create necessary directories and set permissions
-RUN mkdir -p /var/lib/streaming/hls /var/lib/streaming/dash \
-    && chown -R nginx:nginx /usr/local/nginx /var/lib/streaming
+# Copy any additional custom configuration files (adjust path as needed)
+# COPY nginx.conf /usr/local/nginx/conf/nginx.conf
 
-# Expose the necessary ports
-EXPOSE 1935 8080 8443
+# Set PATH environment variable
+ENV PATH="/usr/local/nginx/sbin:$PATH"
+
+# Expose necessary ports
+EXPOSE 1935 80 443
 
 # Set the CMD
 CMD ["nginx", "-g", "daemon off;"]
